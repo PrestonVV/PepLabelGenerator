@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Peptide Vial Label Generator</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: Arial, Helvetica, sans-serif; background: #f4f6f9; color: #111; min-height: 100vh; padding: 2rem 1rem; }
@@ -41,8 +42,21 @@
   .label-main { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 1px; }
   .label-line { font-size: 15px; font-weight: 700; color: #111; text-transform: uppercase; line-height: 1.15; word-break: break-word; }
   .label-line.empty { color: #bbb; font-weight: 400; text-transform: none; font-size: 13px; }
-  .label-footer { font-size: 11px; font-weight: 700; color: #111; text-transform: uppercase; border-top: 1px solid #ddd; padding-top: 5px; display: flex; justify-content: space-between; align-items: flex-end; }
-  .label-url { font-size: 9px; color: #888; font-weight: 400; }
+  .label-footer {
+    font-size: 11px;
+    font-weight: 700;
+    color: #111;
+    text-transform: uppercase;
+    border-top: 1px solid #ddd;
+    padding-top: 5px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+  }
+  .label-footer-text { flex: 1; }
+  .label-qr { width: 36px; height: 36px; flex-shrink: 0; margin-left: 6px; display: flex; align-items: center; justify-content: center; }
+  .label-qr img, .label-qr canvas { width: 36px !important; height: 36px !important; }
+  .label-qr-placeholder { width: 36px; height: 36px; border: 1px dashed #ccc; border-radius: 2px; }
 
   /* Buttons */
   .btn-row { display: flex; gap: 8px; margin-top: 4px; }
@@ -72,7 +86,7 @@
   <ol>
     <li>Enter your <strong>brand / lab name</strong> — this appears at the top of the label.</li>
     <li>Fill in <strong>manufacturer, peptide name, size,</strong> and <strong>date</strong>.</li>
-    <li>Optionally add a <strong>URL</strong> (shown as small text) and edit the <strong>footer note</strong>.</li>
+    <li>Optionally enter a <strong>URL</strong> to generate a scannable QR code on the label.</li>
     <li>Click <strong>Generate Label</strong> to confirm, then <strong>Download JPEG</strong>.</li>
     <li>Print at 100% scale on a <strong>20 × 40mm</strong> label using Niimbot or any compatible printer.</li>
   </ol>
@@ -105,12 +119,8 @@
       </div>
     </div>
     <div class="field">
-      <label>URL (optional — shown small)</label>
+      <label>URL (optional — generates QR code on label)</label>
       <input type="text" id="url" placeholder="https://example.com" oninput="liveUpdate()" />
-    </div>
-    <div class="field">
-      <label>Footer note</label>
-      <input type="text" id="footer" placeholder="RESEARCH USE ONLY" value="RESEARCH USE ONLY" oninput="liveUpdate()" />
     </div>
     <div class="btn-row">
       <button class="btn-reset" onclick="resetFields()">Reset</button>
@@ -131,8 +141,10 @@
           <div class="label-line empty" id="prevDate">Date</div>
         </div>
         <div class="label-footer">
-          <span id="prevFooter">RESEARCH USE ONLY</span>
-          <span class="label-url" id="prevUrl"></span>
+          <span class="label-footer-text">RESEARCH USE ONLY</span>
+          <div class="label-qr" id="qrContainer">
+            <div class="label-qr-placeholder" id="qrPlaceholder"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -144,6 +156,8 @@
 </div>
 
 <script>
+  let qrInstance = null;
+
   function val(id) { return document.getElementById(id).value.trim(); }
 
   function liveUpdate() {
@@ -152,7 +166,6 @@
     const peptide = val('peptide');
     const size = val('size');
     const date = val('date');
-    const footer = val('footer');
     const url = val('url');
 
     const pb = document.getElementById('prevBrand');
@@ -164,8 +177,7 @@
     setLine('prevSize', size, 'Size');
     setLine('prevDate', date, 'Date');
 
-    document.getElementById('prevFooter').textContent = footer || 'RESEARCH USE ONLY';
-    document.getElementById('prevUrl').textContent = url ? shortenUrl(url) : '';
+    updateQR(url);
   }
 
   function setLine(id, v, placeholder) {
@@ -174,8 +186,29 @@
     el.className = 'label-line' + (v ? '' : ' empty');
   }
 
-  function shortenUrl(u) {
-    try { return new URL(u).hostname; } catch(e) { return u; }
+  function updateQR(url) {
+    const container = document.getElementById('qrContainer');
+    const placeholder = document.getElementById('qrPlaceholder');
+
+    if (!url) {
+      container.innerHTML = '<div class="label-qr-placeholder" id="qrPlaceholder"></div>';
+      qrInstance = null;
+      return;
+    }
+
+    container.innerHTML = '<div id="qrCode"></div>';
+    try {
+      qrInstance = new QRCode(document.getElementById('qrCode'), {
+        text: url,
+        width: 36,
+        height: 36,
+        colorDark: '#000000',
+        colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.M
+      });
+    } catch(e) {
+      container.innerHTML = '<div class="label-qr-placeholder" id="qrPlaceholder"></div>';
+    }
   }
 
   function generateLabel() {
@@ -187,7 +220,6 @@
 
   function resetFields() {
     ['brand','mfr','peptide','size','date','url'].forEach(id => document.getElementById(id).value = '');
-    document.getElementById('footer').value = 'RESEARCH USE ONLY';
     document.getElementById('dlBtn').disabled = true;
     document.getElementById('dlBtn').style.opacity = '';
     liveUpdate();
